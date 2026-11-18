@@ -1,0 +1,37 @@
+version: 0.2
+
+env:
+  variables:
+    CONFIGURATION: "Release"
+    PUBLISH_DIR: "output"
+
+phases:
+  install:
+    commands:
+      - 'Write-Host "Installing .NET 8 SDK..."'
+      - 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest ''https://dot.net/v1/dotnet-install.ps1'' -OutFile dotnet-install.ps1"'
+      - 'powershell -NoProfile -ExecutionPolicy Bypass -File .\dotnet-install.ps1 -Version 8.0.411 -InstallDir C:\dotnet'
+      - '$env:PATH = ''C:\dotnet;'' + $env:PATH'
+      - '& ''C:\dotnet\dotnet.exe'' --info'
+      - 'Write-Host "Restoring packages..."'
+      - '& ''C:\dotnet\dotnet.exe'' restore'
+  build:
+    commands:
+      - 'Write-Host "Building..."'
+      - '& ''C:\dotnet\dotnet.exe'' build -c $env:CONFIGURATION --no-restore'
+  post_build:
+    commands:
+      - 'Write-Host "Publishing web projects..."'
+      - |
+        $pubRoot = Join-Path (Get-Location) $env:PUBLISH_DIR
+        New-Item -ItemType Directory -Force -Path $pubRoot | Out-Null
+        Get-ChildItem -Recurse -Filter *.csproj | ForEach-Object {
+          if (Select-String -Path $_.FullName -Pattern 'Microsoft.NET.Sdk.Web' -Quiet) {
+            Write-Host "Publishing $($_.FullName)"
+            & 'C:\dotnet\dotnet.exe' publish $_.FullName -c $env:CONFIGURATION -o (Join-Path $pubRoot $_.BaseName)
+          }
+        }
+artifacts:
+  base-directory: output
+  files:
+    - '**/*'
